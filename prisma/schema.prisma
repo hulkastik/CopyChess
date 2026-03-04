@@ -1,0 +1,42 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── User ──────────────────────────────────────────────────────────────────────
+model User {
+  id           String       @id @default(cuid())
+  username     String       @unique
+  passwordHash String
+
+  // Relations
+  sentRequests     Friendship[] @relation("SentRequests")
+  receivedRequests Friendship[] @relation("ReceivedRequests")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Friendship ────────────────────────────────────────────────────────────────
+model Friendship {
+  id       String @id @default(cuid())
+  status   String @default("PENDING") // PENDING | ACCEPTED | DECLINED
+
+  user1   User   @relation("SentRequests", fields: [user1Id], references: [id])
+  user1Id String
+
+  user2   User   @relation("ReceivedRequests", fields: [user2Id], references: [id])
+  user2Id String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([user1Id, user2Id])
+}
