@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useSocketConnection } from "@/hooks/useSocket";
 import { TIME_CONTROLS, type ColorChoice, type TimeControlKey } from "@/lib/timeControls";
+import RankBadge from "./RankBadge";
 import AuthModal from "./AuthModal";
 import ChallengeModal from "./ChallengeModal";
 
@@ -12,6 +14,7 @@ interface Friend {
   id: string;
   username: string;
   displayName: string;
+  elo: number;
   friendshipId: string;
 }
 
@@ -274,9 +277,17 @@ export default function FriendsSidebar() {
       >
         <div className="flex h-full flex-col p-4 pt-16">
           <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-bold">Freunde</h2>
-              <p className="text-xs text-[var(--text-secondary)]">@{user.username}</p>
+            <div className="min-w-0">
+              <Link
+                href={`/profile/${user.id}`}
+                onClick={() => setIsOpen(false)}
+                className="text-base font-bold hover:text-[var(--accent)]"
+              >
+                {user.displayName}
+              </Link>
+              <div className="mt-0.5">
+                <RankBadge elo={user.elo} compact />
+              </div>
             </div>
             <button
               onClick={handleLogout}
@@ -348,9 +359,15 @@ export default function FriendsSidebar() {
                         online ? "bg-[var(--accent)]" : "bg-[var(--text-secondary)]/40"
                       }`}
                     />
-                    <span className="min-w-0 flex-1 truncate text-sm">
+                    <Link
+                      href={`/profile/${friend.id}`}
+                      onClick={() => setIsOpen(false)}
+                      className="min-w-0 flex-1 truncate text-sm hover:text-[var(--accent)]"
+                      title="Profil ansehen"
+                    >
                       {friend.displayName}
-                    </span>
+                    </Link>
+                    <RankBadge elo={friend.elo} compact />
                     <button
                       onClick={() => removeFriend(friend.friendshipId)}
                       title="Freund entfernen"
@@ -360,9 +377,9 @@ export default function FriendsSidebar() {
                     </button>
                     <button
                       onClick={() => setChallengeTarget(friend)}
-                      disabled={!online || !connected}
+                      disabled={!connected}
                       className="btn btn-primary px-2 py-1 text-xs"
-                      title={online ? "Herausfordern" : "Offline"}
+                      title={online ? "Herausfordern" : "Scheint offline – Versuch schadet nicht"}
                     >
                       ⚔
                     </button>

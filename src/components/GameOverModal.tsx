@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { analyseGame } from "@/lib/analysis";
 import { REASON_TEXT } from "@/lib/gameRules";
 
@@ -29,6 +29,7 @@ export default function GameOverModal({
   myColor,
   movesUci,
   onAnalyse,
+  onAccuracy,
   onRematch,
   onSecondary,
   secondaryLabel,
@@ -42,6 +43,8 @@ export default function GameOverModal({
   myColor: "w" | "b";
   movesUci: string[];
   onAnalyse: () => void;
+  /** Wird einmal aufgerufen, sobald die Genauigkeit feststeht. */
+  onAccuracy?: (whiteAccuracy: number, blackAccuracy: number) => void;
   onRematch?: () => void;
   onSecondary?: () => void;
   secondaryLabel?: string;
@@ -58,6 +61,11 @@ export default function GameOverModal({
   // Zugliste als Zeichenkette: die Array-Identitaet aendert sich bei jedem
   // Server-Update, der Inhalt nach Partieende nicht mehr.
   const movesKey = movesUci.join(" ");
+
+  // Ueber eine Referenz, damit ein neu erzeugter Callback die Analyse nicht
+  // abbricht und von vorn startet.
+  const onAccuracyRef = useRef(onAccuracy);
+  onAccuracyRef.current = onAccuracy;
 
   useEffect(() => {
     const moves = movesKey ? movesKey.split(" ") : [];
@@ -77,6 +85,7 @@ export default function GameOverModal({
       .then((result) => {
         if (signal.aborted) return;
         setAccuracy({ w: result.accuracyWhite, b: result.accuracyBlack });
+        onAccuracyRef.current?.(result.accuracyWhite, result.accuracyBlack);
       })
       .catch(() => {
         if (!signal.aborted) setAccuracyFailed(true);

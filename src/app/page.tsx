@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import GameList from "@/components/GameList";
+import RankBadge from "@/components/RankBadge";
 
 const modes = [
   {
@@ -24,7 +25,7 @@ export default function HomePage() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col px-4 pb-12 pt-20 sm:px-6 sm:pt-16">
-      <header className="mb-10">
+      <header className="mb-8">
         <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">♚ Chess</h1>
         <p className="mt-1 text-[var(--text-secondary)]">
           {ready && user
@@ -32,6 +33,17 @@ export default function HomePage() {
             : "Anmelden, Freunde hinzufügen, herausfordern."}
         </p>
       </header>
+
+      {ready && user && (
+        <section className="mb-8">
+          <Link href={`/profile/${user.id}`} className="block transition hover:opacity-80">
+            <RankBadge elo={user.elo} />
+            <p className="mt-2 text-center text-xs text-[var(--text-secondary)]">
+              Profil und Partieverlauf ansehen →
+            </p>
+          </Link>
+        </section>
+      )}
 
       {/* Herausfordern */}
       <section className="mb-10">

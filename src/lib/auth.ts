@@ -10,6 +10,7 @@ export interface SessionUser {
   username: string;
   displayName: string;
   engineAssist: boolean;
+  elo: number;
 }
 
 function sign(payload: string): string {
@@ -60,7 +61,7 @@ export async function getSessionUser(req: NextRequest): Promise<SessionUser | nu
   if (!userId) return null;
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, username: true, displayName: true, engineAssist: true },
+    select: { id: true, username: true, displayName: true, engineAssist: true, elo: true },
   });
   return user;
 }

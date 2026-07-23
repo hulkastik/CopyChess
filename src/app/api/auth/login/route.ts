@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
         username: user.username,
         displayName: user.displayName,
         engineAssist: user.engineAssist,
+        elo: user.elo,
       },
       token: createToken(user.id),
     });

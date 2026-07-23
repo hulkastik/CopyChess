@@ -14,8 +14,8 @@ export async function GET(req: NextRequest) {
       OR: [{ user1Id: userId }, { user2Id: userId }],
     },
     include: {
-      user1: { select: { id: true, username: true, displayName: true } },
-      user2: { select: { id: true, username: true, displayName: true } },
+      user1: { select: { id: true, username: true, displayName: true, elo: true } },
+      user2: { select: { id: true, username: true, displayName: true, elo: true } },
     },
     orderBy: { updatedAt: "desc" },
   });
@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
       id: friend.id,
       username: friend.username,
       displayName: friend.displayName,
+      elo: friend.elo,
       friendshipId: f.id,
     };
   });

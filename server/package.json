@@ -7,7 +7,8 @@
     "start": "node dist/index.js",
     "build": "tsc",
     "test:rules": "ts-node --transpile-only src/rules.test.ts",
-    "test:accuracy": "ts-node --transpile-only src/accuracy.test.ts"
+    "test:accuracy": "ts-node --transpile-only src/accuracy.test.ts",
+    "test:rating": "ts-node --transpile-only src/rating.test.ts"
   },
   "dependencies": {
     "chess.js": "^1.4.0",

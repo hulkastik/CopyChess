@@ -43,7 +43,7 @@ interface GameStatePayload {
 const ASSIST_DEPTH = 14;
 
 export default function LiveGameBoard({ gameId }: { gameId: string }) {
-  const { user, ready } = useAuth();
+  const { user, ready, authFetch } = useAuth();
   const { socket, connected } = useSocketConnection();
   const router = useRouter();
 
@@ -596,6 +596,15 @@ export default function LiveGameBoard({ gameId }: { gameId: string }) {
           myColor={myColor}
           movesUci={state.movesUci}
           onAnalyse={() => router.push(`/analyse/${gameId}`)}
+          onAccuracy={(whiteAccuracy, blackAccuracy) => {
+            // Fehlschlag ist unkritisch: der andere Spieler reicht denselben
+            // Wert nach, und die Analyseseite rechnet ihn ohnehin neu.
+            authFetch(`/api/games/${gameId}/accuracy`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ whiteAccuracy, blackAccuracy }),
+            }).catch(() => undefined);
+          }}
           onRematch={requestRematch}
           onSecondary={() => router.push("/")}
           secondaryLabel="Startseite"

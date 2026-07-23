@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "postinstall": "node ./scripts/copy-stockfish.js",
+    "postinstall": "prisma generate && node ./scripts/copy-stockfish.js",
     "copy-stockfish": "node ./scripts/copy-stockfish.js",
     "lint": "next lint",
     "seed": "node ./scripts/seed.js",
@@ -16,7 +16,9 @@
     "prisma:migrate": "npx prisma migrate dev",
     "prisma:studio": "npx prisma studio",
     "test:accuracy": "npm --prefix server run test:accuracy",
-    "test": "npm run test:rules && npm run test:accuracy"
+    "test": "npm run test:rules && npm run test:accuracy && npm run test:rating",
+    "icons": "node ./scripts/generate-icons.js",
+    "test:rating": "npm --prefix server run test:rating"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

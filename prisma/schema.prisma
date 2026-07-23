@@ -21,6 +21,12 @@ model User {
   // Nur fuer Konten, bei denen das bewusst gesetzt wurde (Seed: Admin).
   engineAssist Boolean @default(false)
 
+  // Wertung. Startwert 100, Untergrenze ebenfalls 100.
+  elo    Int @default(100)
+  wins   Int @default(0)
+  losses Int @default(0)
+  draws  Int @default(0)
+
   // Relations
   sentRequests     Friendship[] @relation("SentRequests")
   receivedRequests Friendship[] @relation("ReceivedRequests")
@@ -72,6 +78,17 @@ model Game {
   status String  @default("ACTIVE") // ACTIVE | FINISHED | ABORTED
   result String? // 1-0 | 0-1 | 1/2-1/2
   reason String? // checkmate | timeout | resign | stalemate | draw | agreement | abandoned
+
+  // Genauigkeit in Prozent, im Browser berechnet und nachgereicht.
+  whiteAccuracy Float?
+  blackAccuracy Float?
+
+  // Wertungsstand vor der Partie und die Veraenderung — macht die
+  // Wertungsentwicklung im Profil nachvollziehbar.
+  whiteEloBefore Int?
+  blackEloBefore Int?
+  whiteEloChange Int?
+  blackEloChange Int?
 
   startedAt  DateTime  @default(now())
   finishedAt DateTime?

@@ -16,6 +16,7 @@ export interface AuthUser {
   displayName: string;
   /** Blendet waehrend der Partie den Engine-Vorschlag ein (nur Admin-Konto). */
   engineAssist: boolean;
+  elo: number;
 }
 
 interface AuthContextType {

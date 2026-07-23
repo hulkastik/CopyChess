@@ -44,6 +44,44 @@ npx prisma studio          # Tabelle User -> engineAssist
 4. Nach Annahme landen beide automatisch auf `/play/<id>`.
 5. Nach Partieende: **Partieanalyse öffnen** oder **Revanche** (Farben getauscht).
 
+## Wertung, Ränge und Profil
+
+Jedes Konto startet bei **100** Punkten. Nach jeder beendeten Partie wird nach der
+Elo-Formel abgerechnet (K = 32, 400er-Skala): ein Sieg gegen einen deutlich
+stärkeren Gegner bringt bis zu +31, gegen einen deutlich schwächeren nur +1 —
+und eine Niederlage gegen einen Schwächeren kostet entsprechend viel. Die
+Wertung fällt nicht unter den Startwert.
+
+| Rang | ab |
+|---|---|
+| ♙ Bauer | 100 |
+| ♘ Springer | 250 |
+| ♗ Läufer | 450 |
+| ♖ Turm | 700 |
+| ♕ Dame | 1000 |
+| ♔ König | 1400 |
+
+`/profile/<userId>` zeigt Rang, Wertung, Siege/Niederlagen/Remis, Siegquote und
+den Partieverlauf mit Ergebnis, Grund, gespielter Genauigkeit beider Seiten und
+Wertungsänderung. Sichtbar für das eigene Konto und bestätigte Freunde — fremde
+Profile bleiben zu, weil die Partieliste sonst verrät, wer wann gegen wen
+gespielt hat.
+
+Die Wertung wird in derselben Transaktion wie das Partieende verrechnet, mit
+`status: "ACTIVE"` als Bedingung. Der Socket-Server schreibt nach Partieende
+teils mehrfach; so zählt die Abrechnung trotzdem genau einmal.
+
+Die Genauigkeit rechnet der Browser (dort läuft Stockfish) und reicht sie über
+`POST /api/games/<id>/accuracy` nach. Der erste Aufruf gewinnt.
+
+## Startbildschirm-Icon
+
+`npm run icons` erzeugt `apple-icon.png`, `icon.png` und die Manifest-Icons aus
+`scripts/generate-icons.js` — König mit Krone auf Schachbrettsockel, ohne
+Bildbibliothek gerastert und von Hand als PNG kodiert. Zusammen mit
+`display: standalone` im Manifest startet die Seite vom iOS-Homescreen ohne
+Safari-Leisten.
+
 ## Remis- und Abbruchregeln
 
 Gelten identisch in Freundespartien, Training und lokalem Spiel
@@ -126,7 +164,7 @@ partieentscheidender Patzer darin nur 4,4 Prozentpunkte, weil 19 fehlerfreie Zü
 ihn erdrücken. Mit der jetzigen Berechnung sind es 16,6.
 
 ```bash
-npm test   # Remisregeln, Zug-Einstufung, Genauigkeit — 33 Checks
+npm test   # Regeln, Zug-Einstufung, Genauigkeit, Wertung — 53 Checks
 ```
 
 ## Architektur

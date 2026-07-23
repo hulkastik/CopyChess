@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
       data: { username, passwordHash, displayName },
-      select: { id: true, username: true, displayName: true, engineAssist: true },
+      select: { id: true, username: true, displayName: true, engineAssist: true, elo: true },
     });
 
     return NextResponse.json({ user, token: createToken(user.id) }, { status: 201 });
