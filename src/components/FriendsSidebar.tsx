@@ -34,7 +34,7 @@ interface IncomingChallenge {
 
 export default function FriendsSidebar() {
   const { user, ready, logout, authFetch } = useAuth();
-  const { socket, connected, onlineUserIds } = useSocketConnection();
+  const { socket, connected, onlineUserIds, connectionError, socketUrl } = useSocketConnection();
   const router = useRouter();
 
   const [showAuth, setShowAuth] = useState(false);
@@ -163,9 +163,12 @@ export default function FriendsSidebar() {
         color,
         fromDisplayName: user.displayName,
       },
-      (res: { ok: boolean; challengeId?: string; error?: string }) => {
+      (res: { ok: boolean; challengeId?: string; reachable?: boolean; error?: string }) => {
         if (res?.ok && res.challengeId) {
           setPendingOutgoing({ id: res.challengeId, name: target.displayName });
+          if (res.reachable === false) {
+            setMessage(`${target.displayName} ist gerade nicht verbunden – die Anfrage wartet 60 Sekunden.`);
+          }
         } else {
           setMessage(res?.error ?? "Herausforderung fehlgeschlagen");
         }
@@ -337,6 +340,17 @@ export default function FriendsSidebar() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {!connected && (
+            <div className="mb-3 rounded-xl bg-[rgba(229,72,77,0.12)] px-3 py-2 text-xs text-[var(--danger)]">
+              <p className="font-semibold">Kein Kontakt zum Spielserver</p>
+              <p className="mt-1 break-all opacity-80">{socketUrl || "(keine Adresse)"}</p>
+              {connectionError && <p className="mt-1 break-all opacity-80">{connectionError}</p>}
+              <p className="mt-1 opacity-80">
+                Ohne Verbindung sind Online-Anzeige und Herausforderungen nicht möglich.
+              </p>
             </div>
           )}
 

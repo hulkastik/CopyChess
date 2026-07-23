@@ -44,6 +44,30 @@ npx prisma studio          # Tabelle User -> engineAssist
 4. Nach Annahme landen beide automatisch auf `/play/<id>`.
 5. Nach Partieende: **Partieanalyse öffnen** oder **Revanche** (Farben getauscht).
 
+## Socket-Verbindung
+
+Der Browser verbindet sich mit **derselben Herkunft wie die Seite**. Next reicht
+`/socket.io/` an den Spielserver weiter (`next.config.ts`). Damit gibt es keine
+Adresse im Browser-Bundle, kein CORS und keine Tunnel-Regel — drei Fehlerquellen,
+von denen jede einzeln genügte, damit Online-Anzeige und Herausforderungen
+lautlos ausfielen.
+
+`NEXT_PUBLIC_SOCKET_URL` überschreibt das nur, wenn der Spielserver bewusst unter
+einer eigenen Adresse laufen soll. **Steht dort ein alter Wert wie
+`http://localhost:3001`, muss die Zeile weg** — sie landet beim Build fest im
+Bundle und schickt jeden Besucher gegen seinen eigenen Rechner.
+
+Zum Prüfen:
+
+```bash
+curl -s "http://localhost:3000/socket.io/?EIO=4&transport=polling" | head -c 40
+# erwartet:  0{"sid":"…","upgrades":["websocket"]…
+```
+
+Bleibt die Verbindung aus, steht in der Freundesleiste ein roter Kasten mit
+benutzter Adresse und Fehlertext; `pm2 logs chess-socket` zeigt abgewiesene
+Verbindungen samt Herkunft.
+
 ## Wertung, Ränge und Profil
 
 Jedes Konto startet bei **100** Punkten. Nach jeder beendeten Partie wird nach der

@@ -10,12 +10,33 @@ import { v4 as uuidv4 } from "uuid";
 // .env liegt im Projekt-Root, nicht im server/-Ordner.
 dotenv.config({ path: path.resolve(__dirname, "..", "..", ".env") });
 
-const PORT = Number(process.env.SOCKET_PORT || 3001);
+// `PORT` wird mitgelesen, weil pm2 und viele Hoster genau die Variable setzen —
+// ein Server, der nur SOCKET_PORT kennt, landet dort still auf dem falschen Port.
+const PORT = Number(process.env.SOCKET_PORT || process.env.PORT || 3001);
+
+/**
+ * Adresse des Next-Prozesses. Darueber legt der Spielserver Partien an und
+ * schreibt Zuege fort — laeuft Next auf einem anderen Port, schlaegt sonst
+ * jedes Annehmen einer Herausforderung fehl, und zwar erst im Moment des
+ * Annehmens. Deshalb der Erreichbarkeitstest beim Start.
+ */
 const NEXT_API_URL = process.env.NEXT_API_URL || "http://localhost:3000";
 const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET || "chess-internal-dev-secret";
-const CLIENT_ORIGINS = (process.env.CLIENT_ORIGIN || "http://localhost:3000")
+/**
+ * Erlaubte Herkuenfte.
+ *
+ * Ist CLIENT_ORIGIN nicht gesetzt, wird die anfragende Herkunft gespiegelt.
+ * Der frühere Standard "http://localhost:3000" blockierte hinter einer Domain
+ * jede Verbindung per CORS — und zwar lautlos, sichtbar nur als grauer Punkt.
+ * Der Socket-Server traegt keine Cookie-Anmeldung, das Spiegeln oeffnet also
+ * keinen Zugriff; die Identitaet prueft weiterhin auth:identify.
+ */
+const CONFIGURED_ORIGINS = (process.env.CLIENT_ORIGIN || "")
   .split(",")
-  .map((origin) => origin.trim());
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const CORS_ORIGIN: boolean | string[] = CONFIGURED_ORIGINS.length > 0 ? CONFIGURED_ORIGINS : true;
 
 // ─── Typen ────────────────────────────────────────────────────────────────────
 type TimeControlKey = "bullet" | "blitz" | "rapid";
@@ -245,12 +266,12 @@ function hasMatingMaterial(game: GameState, color: Color): boolean {
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 const app = express();
-app.use(cors({ origin: CLIENT_ORIGINS }));
+app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
 app.use(express.json());
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: CLIENT_ORIGINS, methods: ["GET", "POST"] },
+  cors: { origin: CORS_ORIGIN, methods: ["GET", "POST"], credentials: true },
 });
 
 app.get("/api/health", (_req, res) => {
@@ -398,6 +419,21 @@ io.on("connection", (socket: Socket) => {
 
     ack?.({ ok: true, onlineUserIds: Array.from(userSockets.keys()) });
     broadcastPresence();
+
+    // Herausforderungen nachliefern, die eintrafen, waehrend dieser Nutzer
+    // gerade nicht erreichbar war (Seitenwechsel, kurzer Verbindungsabriss).
+    // Ohne das geht eine Anfrage still verloren, obwohl beide online sind.
+    for (const challenge of challenges.values()) {
+      if (challenge.toUserId !== userId) continue;
+      socket.emit("challenge:incoming", {
+        challengeId: challenge.id,
+        fromUserId: challenge.fromUserId,
+        fromDisplayName: challenge.fromDisplayName,
+        timeControl: challenge.timeControl,
+        yourColor:
+          challenge.color === "random" ? "random" : challenge.color === "white" ? "black" : "white",
+      });
+    }
   });
 
   socket.on("auth:logout", () => {
@@ -423,7 +459,7 @@ io.on("connection", (socket: Socket) => {
     ) => {
       const fromUserId = socketUser.get(socket.id);
       if (!fromUserId) {
-        ack?.({ ok: false, error: "Nicht angemeldet" });
+        ack?.({ ok: false, error: "Verbindung nicht angemeldet – Seite neu laden" });
         return;
       }
       const toUserId = data?.toUserId;
@@ -438,10 +474,6 @@ io.on("connection", (socket: Socket) => {
         ack?.({ ok: false, error: "Ungültige Zeitkontrolle" });
         return;
       }
-      if (!userSockets.has(toUserId)) {
-        ack?.({ ok: false, error: "Freund ist offline" });
-        return;
-      }
 
       const challenge: Challenge = {
         id: uuidv4().slice(0, 8),
@@ -454,7 +486,10 @@ io.on("connection", (socket: Socket) => {
       };
       challenges.set(challenge.id, challenge);
 
-      // Nur an den Adressaten — nicht an alle Verbundenen.
+      // Nur an den Adressaten — nicht an alle Verbundenen. Ist er gerade nicht
+      // verbunden, bleibt die Herausforderung bis zum Ablauf liegen und wird
+      // beim naechsten auth:identify zugestellt.
+      const reachable = userSockets.has(toUserId);
       emitToUser(toUserId, "challenge:incoming", {
         challengeId: challenge.id,
         fromUserId,
@@ -464,7 +499,7 @@ io.on("connection", (socket: Socket) => {
         yourColor: color === "random" ? "random" : color === "white" ? "black" : "white",
       });
 
-      ack?.({ ok: true, challengeId: challenge.id });
+      ack?.({ ok: true, challengeId: challenge.id, reachable });
     }
   );
 
@@ -766,7 +801,49 @@ io.on("connection", (socket: Socket) => {
   });
 });
 
+io.engine.on("connection_error", (error: any) => {
+  console.error(
+    `[connection_error] code=${error?.code} msg=${error?.message} origin=${error?.req?.headers?.origin ?? "-"}`
+  );
+});
+
+/**
+ * Prueft beim Start, ob der Next-Prozess erreichbar ist.
+ *
+ * Die interne Route antwortet ohne gueltiges Secret mit 403 — auch das ist ein
+ * Erfolg im Sinne der Erreichbarkeit. Erst ein Verbindungsfehler bedeutet, dass
+ * NEXT_API_URL auf den falschen Port zeigt.
+ */
+async function checkNextReachable(): Promise<void> {
+  try {
+    const response = await fetch(`${NEXT_API_URL}/api/internal/games/ping`, {
+      method: "GET",
+      headers: { "x-internal-secret": INTERNAL_SECRET },
+    });
+    if (response.status === 404 || response.ok) {
+      console.log(`Next-API erreichbar (${NEXT_API_URL})`);
+    } else if (response.status === 403) {
+      console.error(
+        `Next-API erreichbar, aber INTERNAL_API_SECRET stimmt nicht ueberein (${NEXT_API_URL}). ` +
+          `Partien lassen sich damit nicht anlegen.`
+      );
+    } else {
+      console.log(`Next-API antwortet mit ${response.status} (${NEXT_API_URL})`);
+    }
+  } catch (error: any) {
+    console.error(
+      `Next-API NICHT erreichbar unter ${NEXT_API_URL}: ${error?.message}. ` +
+        `Setze NEXT_API_URL in der .env auf den Port, auf dem Next laeuft — ` +
+        `sonst schlaegt jedes Annehmen einer Herausforderung fehl.`
+    );
+  }
+}
+
 server.listen(PORT, () => {
   console.log(`Chess-Server laeuft auf http://localhost:${PORT}`);
   console.log(`Next-API: ${NEXT_API_URL}`);
+  void checkNextReachable();
+  console.log(
+    `Erlaubte Herkunft: ${CONFIGURED_ORIGINS.length > 0 ? CONFIGURED_ORIGINS.join(", ") : "alle (CLIENT_ORIGIN nicht gesetzt)"}`
+  );
 });
