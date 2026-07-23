@@ -1,36 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth";
 
-// GET /api/friends/requests?userId=xxx – list pending friend requests for a user
+// GET /api/friends/requests – offene Anfragen an den eingeloggten User
 export async function GET(req: NextRequest) {
-  const userId = req.nextUrl.searchParams.get("userId");
-  if (!userId) {
-    return NextResponse.json({ error: "userId fehlt" }, { status: 400 });
-  }
+  const auth = await requireUser(req);
+  if (auth.response) return auth.response;
 
   const requests = await prisma.friendship.findMany({
-    where: {
-      user2Id: userId,
-      status: "PENDING",
-    },
-    include: {
-      user1: { select: { id: true, username: true } },
-    },
+    where: { user2Id: auth.user.id, status: "PENDING" },
+    include: { user1: { select: { id: true, username: true, displayName: true } } },
+    orderBy: { createdAt: "desc" },
   });
 
   return NextResponse.json({
-    requests: requests.map((r: { id: string; user1: { id: string; username: string } }) => ({
-      friendshipId: r.id,
-      from: r.user1,
-    })),
+    requests: requests.map((r) => ({ friendshipId: r.id, from: r.user1 })),
   });
 }
 
-// PATCH /api/friends/requests – accept or decline a friend request
+// PATCH /api/friends/requests – Anfrage annehmen oder ablehnen
 export async function PATCH(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.response) return auth.response;
+
   try {
     const { friendshipId, action } = await req.json();
-
     if (!friendshipId || !["accept", "decline"].includes(action)) {
       return NextResponse.json(
         { error: "friendshipId und action (accept/decline) erforderlich" },
@@ -38,19 +32,23 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const friendship = await prisma.friendship.update({
+    const friendship = await prisma.friendship.findUnique({ where: { id: friendshipId } });
+    if (!friendship) {
+      return NextResponse.json({ error: "Anfrage nicht gefunden" }, { status: 404 });
+    }
+    // Nur der Empfaenger darf ueber die eigene Anfrage entscheiden.
+    if (friendship.user2Id !== auth.user.id) {
+      return NextResponse.json({ error: "Kein Zugriff" }, { status: 403 });
+    }
+
+    const updated = await prisma.friendship.update({
       where: { id: friendshipId },
-      data: {
-        status: action === "accept" ? "ACCEPTED" : "DECLINED",
-      },
+      data: { status: action === "accept" ? "ACCEPTED" : "DECLINED" },
     });
 
-    return NextResponse.json({ friendship });
+    return NextResponse.json({ friendship: updated });
   } catch (error) {
     console.error("Friend request error:", error);
-    return NextResponse.json(
-      { error: "Interner Serverfehler" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Interner Serverfehler" }, { status: 500 });
   }
 }

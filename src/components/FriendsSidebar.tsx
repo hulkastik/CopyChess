@@ -1,29 +1,38 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { useSocket } from "@/hooks/useSocket";
+import { useSocketConnection } from "@/hooks/useSocket";
+import { TIME_CONTROLS, type ColorChoice, type TimeControlKey } from "@/lib/timeControls";
 import AuthModal from "./AuthModal";
+import ChallengeModal from "./ChallengeModal";
 
 interface Friend {
   id: string;
   username: string;
+  displayName: string;
   friendshipId: string;
 }
 
 interface FriendRequest {
   friendshipId: string;
-  from: { id: string; username: string };
+  from: { id: string; username: string; displayName: string };
 }
 
-interface ChallengeNotification {
-  roomId: string;
-  fromUsername: string;
+interface IncomingChallenge {
+  challengeId: string;
+  fromUserId: string;
+  fromDisplayName: string;
+  timeControl: TimeControlKey;
+  yourColor: ColorChoice;
+  rematch?: boolean;
 }
 
 export default function FriendsSidebar() {
-  const { user, logout } = useAuth();
-  const socket = useSocket();
+  const { user, ready, logout, authFetch } = useAuth();
+  const { socket, connected, onlineUserIds } = useSocketConnection();
+  const router = useRouter();
 
   const [showAuth, setShowAuth] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -31,101 +40,163 @@ export default function FriendsSidebar() {
   const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [addInput, setAddInput] = useState("");
   const [message, setMessage] = useState("");
-  const [challenge, setChallenge] = useState<ChallengeNotification | null>(null);
+  const [challengeTarget, setChallengeTarget] = useState<Friend | null>(null);
+  const [incoming, setIncoming] = useState<IncomingChallenge | null>(null);
+  const [pendingOutgoing, setPendingOutgoing] = useState<{ id: string; name: string } | null>(null);
 
-  // ── Fetch friends and requests ────────────────────────────────────────
-  const fetchFriends = useCallback(async () => {
-    if (!user) return;
-    const res = await fetch(`/api/friends?userId=${user.id}`);
-    const data = await res.json();
-    if (res.ok) setFriends(data.friends);
-  }, [user]);
-
-  const fetchRequests = useCallback(async () => {
-    if (!user) return;
-    const res = await fetch(`/api/friends/requests?userId=${user.id}`);
-    const data = await res.json();
-    if (res.ok) setRequests(data.requests);
-  }, [user]);
+  // ── Daten laden ─────────────────────────────────────────────────────────
+  const refresh = useCallback(async () => {
+    if (!user) {
+      setFriends([]);
+      setRequests([]);
+      return;
+    }
+    const [friendsRes, requestsRes] = await Promise.all([
+      authFetch("/api/friends"),
+      authFetch("/api/friends/requests"),
+    ]);
+    if (friendsRes.ok) setFriends((await friendsRes.json()).friends);
+    if (requestsRes.ok) setRequests((await requestsRes.json()).requests);
+  }, [user, authFetch]);
 
   useEffect(() => {
-    fetchFriends();
-    fetchRequests();
-  }, [fetchFriends, fetchRequests]);
+    refresh();
+  }, [refresh]);
 
-  // ── Listen for challenge notifications ────────────────────────────────
+  // Offene Anfragen im Hintergrund nachziehen — ohne Reload sichtbar.
   useEffect(() => {
-    socket.on(
-      "challenge-received",
-      (data: { roomId: string; fromUsername: string; targetUserId: string }) => {
-        if (user && data.targetUserId === user.id) {
-          setChallenge({ roomId: data.roomId, fromUsername: data.fromUsername });
-        }
-      }
-    );
+    if (!user) return;
+    const timer = setInterval(refresh, 15_000);
+    return () => clearInterval(timer);
+  }, [user, refresh]);
+
+  // ── Socket-Ereignisse ───────────────────────────────────────────────────
+  useEffect(() => {
+    function onIncoming(data: IncomingChallenge) {
+      setIncoming(data);
+    }
+    function onAccepted(data: { gameId: string }) {
+      setIncoming(null);
+      setPendingOutgoing(null);
+      setIsOpen(false);
+      router.push(`/play/${data.gameId}`);
+    }
+    function onDeclined() {
+      setPendingOutgoing(null);
+      setMessage("Herausforderung abgelehnt.");
+    }
+    function onExpired(data: { challengeId: string }) {
+      setPendingOutgoing((current) => (current?.id === data.challengeId ? null : current));
+      setIncoming((current) => (current?.challengeId === data.challengeId ? null : current));
+    }
+    function onFailed() {
+      setPendingOutgoing(null);
+      setMessage("Partie konnte nicht erstellt werden.");
+    }
+
+    socket.on("challenge:incoming", onIncoming);
+    socket.on("challenge:accepted", onAccepted);
+    socket.on("challenge:declined", onDeclined);
+    socket.on("challenge:expired", onExpired);
+    socket.on("challenge:cancelled", onExpired);
+    socket.on("challenge:failed", onFailed);
+
     return () => {
-      socket.off("challenge-received");
+      socket.off("challenge:incoming", onIncoming);
+      socket.off("challenge:accepted", onAccepted);
+      socket.off("challenge:declined", onDeclined);
+      socket.off("challenge:expired", onExpired);
+      socket.off("challenge:cancelled", onExpired);
+      socket.off("challenge:failed", onFailed);
     };
-  }, [socket, user]);
+  }, [socket, router]);
 
-  // ── Add friend ────────────────────────────────────────────────────────
+  // ── Aktionen ────────────────────────────────────────────────────────────
   async function addFriend() {
-    if (!user || !addInput.trim()) return;
+    if (!addInput.trim()) return;
     setMessage("");
-    const res = await fetch("/api/friends", {
+    const res = await authFetch("/api/friends", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: user.id, friendUsername: addInput.trim() }),
+      body: JSON.stringify({ friendUsername: addInput.trim() }),
     });
     const data = await res.json();
     if (res.ok) {
-      setMessage("Anfrage gesendet!");
+      setMessage("Anfrage gesendet.");
       setAddInput("");
+      refresh();
     } else {
       setMessage(data.error);
     }
   }
 
-  // ── Accept / Decline request ──────────────────────────────────────────
   async function handleRequest(friendshipId: string, action: "accept" | "decline") {
-    const res = await fetch("/api/friends/requests", {
+    const res = await authFetch("/api/friends/requests", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ friendshipId, action }),
     });
-    if (res.ok) {
-      fetchFriends();
-      fetchRequests();
-    }
+    if (res.ok) refresh();
   }
 
-  // ── Challenge friend ──────────────────────────────────────────────────
-  function challengeFriend(friend: Friend) {
-    if (!user) return;
+  async function removeFriend(friendshipId: string) {
+    const res = await authFetch(`/api/friends?friendshipId=${friendshipId}`, {
+      method: "DELETE",
+    });
+    if (res.ok) refresh();
+  }
+
+  function sendChallenge(timeControl: TimeControlKey, color: ColorChoice) {
+    const target = challengeTarget;
+    if (!target || !user) return;
+    setChallengeTarget(null);
+    setMessage("");
+
     socket.emit(
-      "challenge-friend",
-      { targetUserId: friend.id, fromUsername: user.username },
-      (data: { roomId: string }) => {
-        // Navigate to multiplayer with room ID
-        window.location.href = `/multiplayer?room=${data.roomId}`;
+      "challenge:send",
+      {
+        toUserId: target.id,
+        timeControl,
+        color,
+        fromDisplayName: user.displayName,
+      },
+      (res: { ok: boolean; challengeId?: string; error?: string }) => {
+        if (res?.ok && res.challengeId) {
+          setPendingOutgoing({ id: res.challengeId, name: target.displayName });
+        } else {
+          setMessage(res?.error ?? "Herausforderung fehlgeschlagen");
+        }
       }
     );
   }
 
-  // ── Accept challenge ──────────────────────────────────────────────────
-  function acceptChallenge() {
-    if (!challenge) return;
-    window.location.href = `/multiplayer?room=${challenge.roomId}`;
-    setChallenge(null);
+  function respondToChallenge(accept: boolean) {
+    if (!incoming) return;
+    socket.emit("challenge:respond", { challengeId: incoming.challengeId, accept });
+    setIncoming(null);
   }
 
-  // ── Not logged in ─────────────────────────────────────────────────────
+  function cancelOutgoing() {
+    if (!pendingOutgoing) return;
+    socket.emit("challenge:cancel", { challengeId: pendingOutgoing.id });
+    setPendingOutgoing(null);
+  }
+
+  function handleLogout() {
+    socket.emit("auth:logout");
+    logout();
+    setIsOpen(false);
+  }
+
+  // ── Nicht angemeldet ────────────────────────────────────────────────────
+  if (!ready) return null;
+
   if (!user) {
     return (
       <>
         <button
           onClick={() => setShowAuth(true)}
-          className="fixed right-4 top-4 z-40 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-hover)]"
+          className="btn btn-primary fixed right-3 top-3 z-40 sm:right-4 sm:top-4"
         >
           Anmelden
         </button>
@@ -134,105 +205,121 @@ export default function FriendsSidebar() {
     );
   }
 
+  const onlineSet = new Set(onlineUserIds);
+
   return (
     <>
-      {/* Toggle button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed right-4 top-4 z-40 flex items-center gap-2 rounded-lg bg-[var(--bg-card)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent)]"
+        className="fixed right-3 top-3 z-40 flex max-w-[45vw] items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 text-sm font-semibold transition hover:bg-[var(--bg-elevated)] sm:right-4 sm:top-4"
       >
-        👥 {user.username}
+        <span
+          className={`h-2 w-2 rounded-full ${connected ? "bg-[var(--accent)]" : "bg-[var(--danger)]"}`}
+          title={connected ? "Verbunden" : "Keine Verbindung zum Spielserver"}
+        />
+        <span className="truncate">{user.displayName}</span>
         {requests.length > 0 && (
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--accent)] text-xs">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--accent)] text-xs font-bold text-black">
             {requests.length}
           </span>
         )}
       </button>
 
-      {/* Challenge popup */}
-      {challenge && (
-        <div className="fixed right-4 top-16 z-50 w-72 rounded-xl bg-[var(--accent)] p-4 text-white shadow-xl">
-          <p className="font-semibold">
-            ⚔️ {challenge.fromUsername} fordert dich heraus!
+      {/* Eingehende Herausforderung */}
+      {incoming && (
+        <div className="card animate-fade-up fixed inset-x-3 top-16 z-50 border-[var(--accent)] p-4 sm:inset-x-auto sm:right-4 sm:w-80">
+          <p className="text-sm font-semibold">
+            {incoming.rematch ? "Revanche von " : "Herausforderung von "}
+            <span className="text-[var(--accent)]">{incoming.fromDisplayName}</span>
           </p>
-          <div className="mt-2 flex gap-2">
-            <button
-              onClick={acceptChallenge}
-              className="flex-1 rounded-lg bg-white/20 py-1 text-sm font-semibold transition hover:bg-white/30"
-            >
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+            {TIME_CONTROLS[incoming.timeControl].icon}{" "}
+            {TIME_CONTROLS[incoming.timeControl].label} ·{" "}
+            {TIME_CONTROLS[incoming.timeControl].short} · du spielst{" "}
+            {incoming.yourColor === "random"
+              ? "zufällige Farbe"
+              : incoming.yourColor === "white"
+              ? "Weiß"
+              : "Schwarz"}
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button onClick={() => respondToChallenge(true)} className="btn btn-primary flex-1">
               Annehmen
             </button>
-            <button
-              onClick={() => setChallenge(null)}
-              className="flex-1 rounded-lg bg-white/10 py-1 text-sm transition hover:bg-white/20"
-            >
+            <button onClick={() => respondToChallenge(false)} className="btn btn-ghost flex-1">
               Ablehnen
             </button>
           </div>
         </div>
       )}
 
+      {/* Eigene laufende Herausforderung */}
+      {pendingOutgoing && !incoming && (
+        <div className="card animate-fade-up fixed inset-x-3 top-16 z-50 p-4 sm:inset-x-auto sm:right-4 sm:w-80">
+          <p className="text-sm">
+            Warte auf{" "}
+            <span className="font-semibold text-[var(--accent)]">{pendingOutgoing.name}</span>…
+          </p>
+          <button onClick={cancelOutgoing} className="btn btn-ghost mt-3 w-full">
+            Zurückziehen
+          </button>
+        </div>
+      )}
+
       {/* Sidebar */}
       <div
-        className={`fixed right-0 top-0 z-30 h-full w-80 transform bg-[var(--bg-secondary)] shadow-2xl transition-transform duration-300 ${
+        className={`fixed right-0 top-0 z-30 flex h-full w-[min(88vw,20rem)] transform flex-col border-l border-[var(--border)] bg-[var(--bg-secondary)] transition-transform duration-200 ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
         <div className="flex h-full flex-col p-4 pt-16">
-          {/* Header */}
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-bold">Freundesliste</h2>
+            <div>
+              <h2 className="text-base font-bold">Freunde</h2>
+              <p className="text-xs text-[var(--text-secondary)]">@{user.username}</p>
+            </div>
             <button
-              onClick={logout}
-              className="text-xs text-[var(--text-secondary)] transition hover:text-[var(--accent)]"
+              onClick={handleLogout}
+              className="text-xs text-[var(--text-secondary)] transition hover:text-[var(--danger)]"
             >
               Abmelden
             </button>
           </div>
 
-          {/* Add friend */}
-          <div className="mb-4 flex gap-2">
+          <div className="mb-3 flex gap-2">
             <input
+              className="input"
               type="text"
-              placeholder="Username eingeben"
+              placeholder="Username hinzufügen"
               value={addInput}
               onChange={(e) => setAddInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addFriend()}
-              className="flex-1 rounded-lg bg-[var(--bg-card)] px-3 py-2 text-sm text-white placeholder:text-[var(--text-secondary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
             />
-            <button
-              onClick={addFriend}
-              className="rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent-hover)]"
-            >
+            <button onClick={addFriend} className="btn btn-primary px-3">
               +
             </button>
           </div>
-          {message && (
-            <p className="mb-2 text-xs text-[var(--accent)]">{message}</p>
-          )}
+          {message && <p className="mb-3 text-xs text-[var(--accent)]">{message}</p>}
 
-          {/* Pending requests */}
           {requests.length > 0 && (
             <div className="mb-4">
-              <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                Anfragen ({requests.length})
-              </h3>
+              <p className="label mb-2">Anfragen ({requests.length})</p>
               {requests.map((r) => (
                 <div
                   key={r.friendshipId}
-                  className="mb-2 flex items-center justify-between rounded-lg bg-[var(--bg-card)] px-3 py-2"
+                  className="mb-2 flex items-center justify-between rounded-xl bg-[var(--bg-card)] px-3 py-2"
                 >
-                  <span className="text-sm">{r.from.username}</span>
+                  <span className="text-sm">{r.from.displayName}</span>
                   <div className="flex gap-1">
                     <button
                       onClick={() => handleRequest(r.friendshipId, "accept")}
-                      className="rounded bg-green-600 px-2 py-1 text-xs text-white transition hover:bg-green-500"
+                      className="rounded-lg bg-[var(--accent)] px-2 py-1 text-xs font-bold text-black"
                     >
                       ✓
                     </button>
                     <button
                       onClick={() => handleRequest(r.friendshipId, "decline")}
-                      className="rounded bg-red-600 px-2 py-1 text-xs text-white transition hover:bg-red-500"
+                      className="btn-danger rounded-lg px-2 py-1 text-xs font-bold"
                     >
                       ✗
                     </button>
@@ -242,40 +329,60 @@ export default function FriendsSidebar() {
             </div>
           )}
 
-          {/* Friends list */}
-          <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-            Freunde ({friends.length})
-          </h3>
-          <div className="flex-1 overflow-y-auto">
+          <p className="label mb-2">Freundesliste ({friends.length})</p>
+          <div className="-mr-2 flex-1 overflow-y-auto pr-2">
             {friends.length === 0 ? (
               <p className="text-sm text-[var(--text-secondary)]">
-                Noch keine Freunde
+                Noch niemand. Username oben eintragen.
               </p>
             ) : (
-              friends.map((f) => (
-                <div
-                  key={f.id}
-                  className="mb-2 flex items-center justify-between rounded-lg bg-[var(--bg-card)] px-3 py-2"
-                >
-                  <span className="text-sm">{f.username}</span>
-                  <button
-                    onClick={() => challengeFriend(f)}
-                    className="rounded-lg bg-[var(--accent)] px-3 py-1 text-xs font-semibold text-white transition hover:bg-[var(--accent-hover)]"
+              friends.map((friend) => {
+                const online = onlineSet.has(friend.id);
+                return (
+                  <div
+                    key={friend.id}
+                    className="group mb-2 flex items-center gap-2 rounded-xl bg-[var(--bg-card)] px-3 py-2"
                   >
-                    ⚔️ Herausfordern
-                  </button>
-                </div>
-              ))
+                    <span
+                      className={`h-2 w-2 shrink-0 rounded-full ${
+                        online ? "bg-[var(--accent)]" : "bg-[var(--text-secondary)]/40"
+                      }`}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {friend.displayName}
+                    </span>
+                    <button
+                      onClick={() => removeFriend(friend.friendshipId)}
+                      title="Freund entfernen"
+                      className="text-xs text-[var(--text-secondary)] opacity-0 transition group-hover:opacity-100 hover:text-[var(--danger)]"
+                    >
+                      ✕
+                    </button>
+                    <button
+                      onClick={() => setChallengeTarget(friend)}
+                      disabled={!online || !connected}
+                      className="btn btn-primary px-2 py-1 text-xs"
+                      title={online ? "Herausfordern" : "Offline"}
+                    >
+                      ⚔
+                    </button>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
       </div>
 
-      {/* Overlay when sidebar is open */}
       {isOpen && (
-        <div
-          className="fixed inset-0 z-20 bg-black/30"
-          onClick={() => setIsOpen(false)}
+        <div className="fixed inset-0 z-20 bg-black/40" onClick={() => setIsOpen(false)} />
+      )}
+
+      {challengeTarget && (
+        <ChallengeModal
+          opponentName={challengeTarget.displayName}
+          onCancel={() => setChallengeTarget(null)}
+          onSubmit={sendChallenge}
         />
       )}
     </>

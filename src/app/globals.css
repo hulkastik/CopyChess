@@ -1,32 +1,167 @@
 @import "tailwindcss";
 
 :root {
-  --bg-primary: #1a1a2e;
-  --bg-secondary: #16213e;
-  --bg-card: #0f3460;
-  --accent: #e94560;
-  --accent-hover: #ff6b81;
-  --text-primary: #eaeaea;
-  --text-secondary: #a0a0b0;
+  --bg-primary: #12141a;
+  --bg-secondary: #191c24;
+  --bg-card: #212530;
+  --bg-elevated: #2a2f3d;
+  --border: rgba(255, 255, 255, 0.07);
+  --accent: #6bab4a;
+  --accent-hover: #7dc457;
+  --accent-soft: rgba(107, 171, 74, 0.14);
+  --danger: #e5484d;
+  --text-primary: #eceff4;
+  --text-secondary: #8b93a5;
+
+  --square-light: #eeeed2;
+  --square-dark: #769656;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  /* Verhindert, dass iOS beim Fokussieren von Eingaben hineinzoomt. */
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: "Inter", "Segoe UI", sans-serif;
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+/* Ziehen einer Figur darf auf dem Touchscreen nicht die Seite scrollen. */
+.board-shell {
+  touch-action: manipulation;
+}
+.board-shell [role="button"],
+.board-shell [draggable="true"] {
+  touch-action: none;
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--bg-card);
-  border-radius: 4px;
+  background: var(--bg-elevated);
+  border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--accent);
+}
+
+/* ── Wiederverwendbare Bausteine ─────────────────────────────────────────── */
+.card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.btn {
+  border-radius: 10px;
+  padding: 0.6rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+  cursor: pointer;
+  /* Mindestgroesse fuer Finger — darunter trifft man auf dem Handy daneben. */
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #0d1108;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn-ghost {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--bg-elevated);
+}
+
+.btn-danger {
+  background: rgba(229, 72, 77, 0.14);
+  color: var(--danger);
+}
+.btn-danger:hover:not(:disabled) {
+  background: rgba(229, 72, 77, 0.24);
+}
+
+.input {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem 0.85rem;
+  /* 16px: alles darunter loest auf iOS automatisches Hineinzoomen aus. */
+  font-size: 16px;
+  min-height: 44px;
+  color: var(--text-primary);
+  width: 100%;
+}
+
+@media (min-width: 640px) {
+  .input {
+    font-size: 0.875rem;
+  }
+}
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.input::placeholder {
+  color: var(--text-secondary);
+}
+
+.label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.clock-active {
+  background: var(--text-primary);
+  color: #12141a;
+}
+
+.clock-low {
+  background: var(--danger);
+  color: #fff;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-up {
+  animation: fade-up 0.18s ease-out;
 }

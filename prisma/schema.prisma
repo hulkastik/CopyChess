@@ -12,13 +12,20 @@ datasource db {
 
 // ─── User ──────────────────────────────────────────────────────────────────────
 model User {
-  id           String       @id @default(cuid())
-  username     String       @unique
+  id           String @id @default(cuid())
+  username     String @unique
   passwordHash String
+  displayName  String
+
+  // Blendet waehrend einer laufenden Partie den Engine-Vorschlag ein.
+  // Nur fuer Konten, bei denen das bewusst gesetzt wurde (Seed: Admin).
+  engineAssist Boolean @default(false)
 
   // Relations
   sentRequests     Friendship[] @relation("SentRequests")
   receivedRequests Friendship[] @relation("ReceivedRequests")
+  gamesAsWhite     Game[]       @relation("WhiteGames")
+  gamesAsBlack     Game[]       @relation("BlackGames")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -26,17 +33,51 @@ model User {
 
 // ─── Friendship ────────────────────────────────────────────────────────────────
 model Friendship {
-  id       String @id @default(cuid())
-  status   String @default("PENDING") // PENDING | ACCEPTED | DECLINED
+  id     String @id @default(cuid())
+  status String @default("PENDING") // PENDING | ACCEPTED | DECLINED
 
-  user1   User   @relation("SentRequests", fields: [user1Id], references: [id])
+  user1   User   @relation("SentRequests", fields: [user1Id], references: [id], onDelete: Cascade)
   user1Id String
 
-  user2   User   @relation("ReceivedRequests", fields: [user2Id], references: [id])
+  user2   User   @relation("ReceivedRequests", fields: [user2Id], references: [id], onDelete: Cascade)
   user2Id String
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([user1Id, user2Id])
+}
+
+// ─── Game ──────────────────────────────────────────────────────────────────────
+model Game {
+  id String @id @default(cuid())
+
+  white   User   @relation("WhiteGames", fields: [whiteId], references: [id], onDelete: Cascade)
+  whiteId String
+  black   User   @relation("BlackGames", fields: [blackId], references: [id], onDelete: Cascade)
+  blackId String
+
+  timeControl      String // bullet | blitz | rapid
+  initialSeconds   Int
+  incrementSeconds Int
+
+  // Zugliste als UCI, durch Leerzeichen getrennt ("e2e4 e7e5 g1f3").
+  // Reicht aus, um die komplette Partie deterministisch nachzuspielen.
+  movesUci String @default("")
+  fen      String @default("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+
+  whiteMs Int
+  blackMs Int
+
+  status String  @default("ACTIVE") // ACTIVE | FINISHED | ABORTED
+  result String? // 1-0 | 0-1 | 1/2-1/2
+  reason String? // checkmate | timeout | resign | stalemate | draw | agreement | abandoned
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  updatedAt  DateTime  @updatedAt
+
+  @@index([whiteId])
+  @@index([blackId])
+  @@index([status])
 }

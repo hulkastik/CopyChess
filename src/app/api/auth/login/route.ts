@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { prisma } from "@/lib/prisma";
+import { createToken } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
-    const { username, password } = await req.json();
+    const body = await req.json();
+    const username = String(body.username ?? "").trim();
+    const password = String(body.password ?? "");
 
     if (!username || !password) {
       return NextResponse.json(
@@ -14,30 +17,26 @@ export async function POST(req: NextRequest) {
     }
 
     const user = await prisma.user.findUnique({ where: { username } });
-    if (!user) {
+    // Gleiche Fehlermeldung fuer "kein User" und "falsches Passwort" —
+    // sonst laesst sich ueber die API herausfinden, welche Namen existieren.
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       return NextResponse.json(
         { error: "Ungültiger Username oder Passwort" },
         { status: 401 }
       );
     }
 
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) {
-      return NextResponse.json(
-        { error: "Ungültiger Username oder Passwort" },
-        { status: 401 }
-      );
-    }
-
-    // Simple session: return user data (no JWT for now)
     return NextResponse.json({
-      user: { id: user.id, username: user.username },
+      user: {
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        engineAssist: user.engineAssist,
+      },
+      token: createToken(user.id),
     });
   } catch (error) {
     console.error("Login error:", error);
-    return NextResponse.json(
-      { error: "Interner Serverfehler" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Interner Serverfehler" }, { status: 500 });
   }
 }

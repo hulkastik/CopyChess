@@ -1,11 +1,20 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import FriendsSidebar from "@/components/FriendsSidebar";
 
 export const metadata: Metadata = {
-  title: "Chess App",
-  description: "Play chess online – local, multiplayer, or vs AI",
+  title: "Chess",
+  description: "Schach gegen Freunde, gegen Stockfish, mit Partieanalyse",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // Zoom bleibt erlaubt (Zugänglichkeit), aber Doppeltipp-Zoom stoert das
+  // Ziehen von Figuren nicht mehr, weil das Brett touch-action selbst setzt.
+  maximumScale: 5,
+  themeColor: "#12141a",
 };
 
 export default function RootLayout({
@@ -15,7 +24,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="de">
-      <body className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
+      <body className="min-h-screen overflow-x-hidden bg-[var(--bg-primary)] text-[var(--text-primary)]">
         <AuthProvider>
           <FriendsSidebar />
           {children}

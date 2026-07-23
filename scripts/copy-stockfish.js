@@ -15,7 +15,13 @@ const pkgRoot = process.cwd();
 const publicDir = path.join(pkgRoot, 'public');
 const nm = path.join(pkgRoot, 'node_modules', 'stockfish', 'bin');
 
+// Reihenfolge ist Absicht:
+// - "-single": kein SharedArrayBuffer, also keine COOP/COEP-Header noetig
+// - "-lite":   7 MB statt 108 MB WASM. Kleineres NNUE-Netz, spielstaerkemaessig
+//              immer noch weit ueber 3000 Elo — der grosse Build kostet nur
+//              Ladezeit und Tab-Speicher.
 const candidates = [
+  { js: 'stockfish-18-lite-single.js', wasm: 'stockfish-18-lite-single.wasm' },
   { js: 'stockfish-18-single.js', wasm: 'stockfish-18-single.wasm' },
   { js: 'stockfish-18.js', wasm: 'stockfish-18.wasm' },
   { js: 'stockfish.js', wasm: 'stockfish.wasm' },

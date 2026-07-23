@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useAuth } from "@/context/AuthContext";
+import GameList from "@/components/GameList";
 
 const modes = [
   {
@@ -10,46 +12,74 @@ const modes = [
     icon: "♟️",
   },
   {
-    title: "Multiplayer",
-    description: "Online gegen Freunde spielen",
-    href: "/multiplayer",
-    icon: "🌐",
-  },
-  {
     title: "Training",
-    description: "Gegen Stockfish-KI trainieren",
+    description: "Gegen Stockfish auf sieben Stufen",
     href: "/training",
     icon: "🤖",
   },
 ];
 
 export default function HomePage() {
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-8">
-      <h1 className="mb-2 text-5xl font-extrabold tracking-tight">
-        ♚ Chess App
-      </h1>
-      <p className="mb-12 text-lg text-[var(--text-secondary)]">
-        Wähle einen Spielmodus
-      </p>
+  const { user, ready } = useAuth();
 
-      <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-3">
-        {modes.map((mode) => (
-          <Link
-            key={mode.href}
-            href={mode.href}
-            className="group flex flex-col items-center rounded-2xl border border-white/10 bg-[var(--bg-secondary)] px-8 py-10 transition-all hover:border-[var(--accent)] hover:shadow-lg hover:shadow-[var(--accent)]/20"
-          >
-            <span className="mb-4 text-5xl">{mode.icon}</span>
-            <h2 className="mb-1 text-xl font-bold group-hover:text-[var(--accent)]">
-              {mode.title}
-            </h2>
-            <p className="text-sm text-[var(--text-secondary)]">
-              {mode.description}
-            </p>
-          </Link>
-        ))}
-      </div>
+  return (
+    <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col px-4 pb-12 pt-20 sm:px-6 sm:pt-16">
+      <header className="mb-10">
+        <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">♚ Chess</h1>
+        <p className="mt-1 text-[var(--text-secondary)]">
+          {ready && user
+            ? `Willkommen, ${user.displayName}.`
+            : "Anmelden, Freunde hinzufügen, herausfordern."}
+        </p>
+      </header>
+
+      {/* Herausfordern */}
+      <section className="mb-10">
+        <h2 className="label mb-3">Gegen Freunde</h2>
+        <div className="card p-5">
+          <p className="text-sm text-[var(--text-secondary)]">
+            {ready && user ? (
+              <>
+                Öffne die Freundesliste oben rechts, wähle einen Freund und starte eine
+                Partie in <span className="text-[var(--text-primary)]">Bullet</span>,{" "}
+                <span className="text-[var(--text-primary)]">Blitz</span> oder{" "}
+                <span className="text-[var(--text-primary)]">10 Minuten</span> – mit
+                Farbwahl Weiß, Schwarz oder Zufall.
+              </>
+            ) : (
+              "Melde dich oben rechts an, um Freunde hinzuzufügen und herauszufordern."
+            )}
+          </p>
+        </div>
+      </section>
+
+      {/* Partien */}
+      {ready && user && (
+        <section className="mb-10">
+          <h2 className="label mb-3">Deine Partien</h2>
+          <GameList />
+        </section>
+      )}
+
+      {/* Weitere Modi */}
+      <section>
+        <h2 className="label mb-3">Weitere Modi</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {modes.map((mode) => (
+            <Link
+              key={mode.href}
+              href={mode.href}
+              className="group flex items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] px-5 py-4 transition hover:border-[var(--accent)]"
+            >
+              <span className="text-3xl">{mode.icon}</span>
+              <div>
+                <h3 className="font-bold group-hover:text-[var(--accent)]">{mode.title}</h3>
+                <p className="text-sm text-[var(--text-secondary)]">{mode.description}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
     </main>
   );
 }

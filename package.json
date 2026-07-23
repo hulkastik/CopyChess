@@ -9,9 +9,14 @@
     "postinstall": "node ./scripts/copy-stockfish.js",
     "copy-stockfish": "node ./scripts/copy-stockfish.js",
     "lint": "next lint",
+    "seed": "node ./scripts/seed.js",
+    "server": "npm --prefix server run dev",
+    "test:rules": "npm --prefix server run test:rules",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "npx prisma migrate dev",
-    "prisma:studio": "npx prisma studio"
+    "prisma:studio": "npx prisma studio",
+    "test:accuracy": "npm --prefix server run test:accuracy",
+    "test": "npm run test:rules && npm run test:accuracy"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

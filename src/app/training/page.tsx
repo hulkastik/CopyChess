@@ -1,19 +1,10 @@
 import TrainingBoard from "@/components/TrainingBoard";
-import Link from "next/link";
+import PageHeader from "@/components/PageHeader";
 
 export default function TrainingPage() {
   return (
-    <main className="flex min-h-screen flex-col items-center p-6">
-      <div className="mb-6 flex w-full max-w-4xl items-center justify-between">
-        <Link
-          href="/"
-          className="text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--accent)]"
-        >
-          ← Zurück
-        </Link>
-        <h1 className="text-2xl font-bold">🤖 Training vs. Stockfish</h1>
-        <div className="w-16" />
-      </div>
+    <main className="flex min-h-screen flex-col items-center px-3 py-4 sm:px-6 sm:py-6">
+      <PageHeader title="🤖 Training vs. Stockfish" />
       <TrainingBoard />
     </main>
   );
