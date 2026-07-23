@@ -68,6 +68,27 @@ Bleibt die Verbindung aus, steht in der Freundesleiste ein roter Kasten mit
 benutzter Adresse und Fehlertext; `pm2 logs chess-socket` zeigt abgewiesene
 Verbindungen samt Herkunft.
 
+## Zuschauen
+
+`/watch/<gameId>` zeigt eine laufende Partie live: Brett, beide Uhren, Zugliste,
+Ergebnis. Nur-Lesen — kein Zug, kein Aufgeben, keine Engine-Empfehlung.
+
+Zu finden über den Abschnitt **Läuft gerade** auf der Startseite und über das
+Augen-Symbol in der Freundesliste, das den Herausfordern-Knopf ersetzt, solange
+der Freund gerade spielt.
+
+Sichtbar sind eigene Partien und Partien, an denen **mindestens ein Freund**
+beteiligt ist. Die Prüfung macht Next (`/api/internal/spectate`), weil dort die
+Freundschaften liegen; der Spielserver fragt dort nach, bevor er jemanden in den
+Partieraum lässt.
+
+Zuschauer werden bewusst nicht in `game.joined` eingetragen. Die Uhr startet,
+sobald zwei **Beteiligte** am Brett sitzen — ein Zuschauer darf sie nicht
+anwerfen. Ist getestet: Zuschauer vor Spielbeginn, Uhr bleibt bei 3:00 stehen.
+
+Die Partieanalyse bleibt Beteiligten vorbehalten; `/api/games/<id>` antwortet
+Zuschauern weiterhin mit 403.
+
 ## Wertung, Ränge und Profil
 
 Jedes Konto startet bei **100** Punkten. Nach jeder beendeten Partie wird nach der

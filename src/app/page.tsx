@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import GameList from "@/components/GameList";
+import LiveGamesList from "@/components/LiveGamesList";
 import RankBadge from "@/components/RankBadge";
 
 const modes = [
@@ -64,6 +65,8 @@ export default function HomePage() {
           </p>
         </div>
       </section>
+
+      <LiveGamesList />
 
       {/* Partien */}
       {ready && user && (

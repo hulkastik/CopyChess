@@ -615,6 +615,44 @@ io.on("connection", (socket: Socket) => {
     broadcastGame(io, game);
   });
 
+  // ── Zuschauen ───────────────────────────────────────────────────────────
+  socket.on("game:spectate", async (data: { gameId?: string }, ack?: (r: unknown) => void) => {
+    const userId = socketUser.get(socket.id);
+    if (!userId || !data?.gameId) {
+      ack?.({ ok: false, error: "Nicht angemeldet" });
+      return;
+    }
+
+    // Berechtigung liegt bei Next — dort stehen die Freundschaften.
+    let allowed = false;
+    try {
+      const payload = await internalFetch(
+        `/api/internal/spectate?gameId=${encodeURIComponent(data.gameId)}&userId=${encodeURIComponent(userId)}`
+      );
+      allowed = Boolean(payload?.allowed);
+    } catch (error: any) {
+      console.error("[game:spectate]", error.message);
+      ack?.({ ok: false, error: "Berechtigung nicht prüfbar" });
+      return;
+    }
+
+    if (!allowed) {
+      ack?.({ ok: false, error: "Nur Partien von Freunden sind einsehbar" });
+      return;
+    }
+
+    const game = await loadGame(data.gameId);
+    if (!game) {
+      ack?.({ ok: false, error: "Partie nicht gefunden" });
+      return;
+    }
+
+    // Bewusst NICHT in `game.joined` eintragen: die Uhr startet, sobald zwei
+    // Beteiligte am Brett sitzen — ein Zuschauer darf sie nicht anwerfen.
+    socket.join(`game:${game.id}`);
+    ack?.({ ok: true, state: serializeGame(game) });
+  });
+
   socket.on("game:leave", (data: { gameId?: string }) => {
     if (data?.gameId) socket.leave(`game:${data.gameId}`);
   });

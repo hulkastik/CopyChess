@@ -46,6 +46,8 @@ export default function FriendsSidebar() {
   const [challengeTarget, setChallengeTarget] = useState<Friend | null>(null);
   const [incoming, setIncoming] = useState<IncomingChallenge | null>(null);
   const [pendingOutgoing, setPendingOutgoing] = useState<{ id: string; name: string } | null>(null);
+  /** userId -> laufende Partie, in der dieser Freund gerade spielt. */
+  const [liveByUser, setLiveByUser] = useState<Record<string, string>>({});
 
   // ── Daten laden ─────────────────────────────────────────────────────────
   const refresh = useCallback(async () => {
@@ -54,12 +56,23 @@ export default function FriendsSidebar() {
       setRequests([]);
       return;
     }
-    const [friendsRes, requestsRes] = await Promise.all([
+    const [friendsRes, requestsRes, liveRes] = await Promise.all([
       authFetch("/api/friends"),
       authFetch("/api/friends/requests"),
+      authFetch("/api/games/live"),
     ]);
     if (friendsRes.ok) setFriends((await friendsRes.json()).friends);
     if (requestsRes.ok) setRequests((await requestsRes.json()).requests);
+    if (liveRes.ok) {
+      const { games } = await liveRes.json();
+      const map: Record<string, string> = {};
+      for (const game of games) {
+        if (game.isMine) continue;
+        map[game.white.id] = game.id;
+        map[game.black.id] = game.id;
+      }
+      setLiveByUser(map);
+    }
   }, [user, authFetch]);
 
   useEffect(() => {
@@ -389,14 +402,25 @@ export default function FriendsSidebar() {
                     >
                       ✕
                     </button>
-                    <button
-                      onClick={() => setChallengeTarget(friend)}
-                      disabled={!connected}
-                      className="btn btn-primary px-2 py-1 text-xs"
-                      title={online ? "Herausfordern" : "Scheint offline – Versuch schadet nicht"}
-                    >
-                      ⚔
-                    </button>
+                    {liveByUser[friend.id] ? (
+                      <Link
+                        href={`/watch/${liveByUser[friend.id]}`}
+                        onClick={() => setIsOpen(false)}
+                        className="btn btn-ghost px-2 py-1 text-xs"
+                        title="Spielt gerade – zuschauen"
+                      >
+                        👁
+                      </Link>
+                    ) : (
+                      <button
+                        onClick={() => setChallengeTarget(friend)}
+                        disabled={!connected}
+                        className="btn btn-primary px-2 py-1 text-xs"
+                        title={online ? "Herausfordern" : "Scheint offline – Versuch schadet nicht"}
+                      >
+                        ⚔
+                      </button>
+                    )}
                   </div>
                 );
               })
